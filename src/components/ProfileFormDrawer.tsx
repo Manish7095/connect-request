@@ -1,53 +1,89 @@
 import { useState, useEffect } from "react";
 import { Modal, Form, Input, Row, Col, Select, Button } from "antd";
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, type SubmitHandler } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+
 import { profileFormSchema } from "../Schema/profileFormSchema";
 import WhatsAppIcon from "../assets/icons/whatsapp.svg";
 import VerifyOtpModal from "./VerifyOtpModal";
 import SuccessModal from "./SuccessModal";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { cities } from "../constants/ProfileForm-constant";
+import { getStates, getCities, type State, type City } from "../api/locationApi";
+import { getOTP } from "../api/OTPApi";
+import type { ConnectionData } from "../api/connectionApi";
 
 const { Option } = Select;
 
-const states = ["Gujarat", "Maharashtra", "Rajasthan", "Delhi"];
+export type ProfileFormData = {
+    whatsappNumber: string;
+    firstName: string;
+    lastName: string;
+    companyName: string;
+    state: string;
+    city: string;
+};
 
 
-const ProfilePopupForm = ({
-    open,
-    onClose,
-}: {
+interface ProfilePopupFormProps {
     open: boolean;
     onClose: () => void;
-}) => {
+}
+
+const ProfilePopupForm = ({ open, onClose }: ProfilePopupFormProps) => {
     const [isOtpModalVisible, setIsOtpModalVisible] = useState(false);
-    const [phoneNumber, setPhoneNumber] = useState("");
+    const [phoneNumber, setPhoneNumber] = useState<string>("");
     const [isSuccessModalVisible, setIsSuccessModalVisible] = useState(false);
+    const [formData, setFormData] = useState<ConnectionData | undefined>(undefined);
+
+
     const [isFormVisible, setIsFormVisible] = useState(open);
+
+    const [stateList, setStateList] = useState<State[]>([]);
+    const [cityList, setCityList] = useState<City[]>([]);
 
     useEffect(() => {
         setIsFormVisible(open);
     }, [open]);
+
     const {
         control,
         handleSubmit,
-        watch,
         formState: { errors },
-    } = useForm({
+    } = useForm<ProfileFormData>({
         resolver: zodResolver(profileFormSchema),
     });
 
+    useEffect(() => {
+        const fetchStates = async () => {
+            try {
+                const data = await getStates();
+                setStateList(data);
+            } catch (err) {
+                console.error("Error fetching states:", err);
+            }
+        };
+        fetchStates();
+    }, []);
 
+    const onSubmit: SubmitHandler<ProfileFormData> = async (data) => {
+        try {
+            const result = await getOTP({ phoneNo: data?.whatsappNumber });
+            console.log("✅ OTP API Success:", result);
 
-    const selectedState = watch("state");
+            setPhoneNumber(data.whatsappNumber);
 
-    const onSubmit = (data: any) => {
-        console.log("Form Data:", data);
-        setPhoneNumber(data.whatsappNumber);
-        setIsFormVisible(false);
-        setTimeout(() => {
-            setIsOtpModalVisible(true);
-        }, 300);
+            setFormData({
+                companyName: data.companyName,
+                firstName: data.firstName,
+                lastName: data.lastName,
+                phoneNo: data.whatsappNumber,
+                state: data.state,
+                city: data.city,
+            });
+            setIsFormVisible(false);
+            setTimeout(() => setIsOtpModalVisible(true), 300);
+        } catch (error) {
+            alert("Failed to submit profile details. Please try again.");
+        }
     };
 
     return (
@@ -65,8 +101,7 @@ const ProfilePopupForm = ({
                     <div className="text-left font-semibold text-lg mt-4">
                         Complete Your Profile to Get Started
                         <div className="text-sm text-gray-500">
-                            We need a few details to set up your Business Profile and connect
-                            you with vendors.
+                            We need a few details to set up your Business Profile and connect you with vendors.
                         </div>
                     </div>
                 }
@@ -103,18 +138,13 @@ const ProfilePopupForm = ({
                                             className="w-[407px] h-[48px] rounded-[16px]"
                                             onChange={(e) => {
                                                 let value = e.target.value.replace(/\D/g, "");
-
-                                                // If input is empty, allow
                                                 if (value === "") {
                                                     field.onChange("");
                                                     return;
                                                 }
-
                                                 if (value.length === 1 && !/^[6-9]$/.test(value)) {
                                                     return;
                                                 }
-
-                                                // Allow only max 10 digits
                                                 if (value.length <= 10) {
                                                     field.onChange(value);
                                                 }
@@ -126,6 +156,7 @@ const ProfilePopupForm = ({
                             </Form.Item>
                         </Col>
 
+                        {/* First Name */}
                         <Col xs={24} md={12}>
                             <Form.Item
                                 label={
@@ -150,6 +181,7 @@ const ProfilePopupForm = ({
                             </Form.Item>
                         </Col>
 
+                        {/* Last Name */}
                         <Col xs={24} md={12}>
                             <Form.Item
                                 label={
@@ -174,6 +206,7 @@ const ProfilePopupForm = ({
                             </Form.Item>
                         </Col>
 
+                        {/* Company Name */}
                         <Col xs={24} md={12}>
                             <Form.Item
                                 label={
@@ -198,6 +231,7 @@ const ProfilePopupForm = ({
                             </Form.Item>
                         </Col>
 
+                        {/* State */}
                         <Col xs={24} md={12}>
                             <Form.Item
                                 label={
@@ -215,20 +249,31 @@ const ProfilePopupForm = ({
                                         <Select
                                             {...field}
                                             placeholder="Select state"
+                                            showSearch
+                                            optionFilterProp="children"
                                             className="w-[407px] rounded-[16px]"
                                             style={{ height: 48 }}
+                                            onChange={(stateName) => {
+                                                field.onChange(stateName);
+                                                getCities(stateName).then((data) => setCityList(data));
+                                            }}
+                                            filterOption={(input, option) =>
+                                                (option?.children as unknown as string)?.toLowerCase().includes(input.toLowerCase())
+                                            }
                                         >
-                                            {states.map((state) => (
-                                                <Option key={state} value={state}>
-                                                    {state}
+                                            {stateList.map((state) => (
+                                                <Option key={state.stateCode} value={state.state}>
+                                                    {state.state}
                                                 </Option>
                                             ))}
                                         </Select>
                                     )}
                                 />
+
                             </Form.Item>
                         </Col>
 
+                        {/* City */}
                         <Col xs={24} md={12}>
                             <Form.Item
                                 label={
@@ -246,23 +291,32 @@ const ProfilePopupForm = ({
                                         <Select
                                             {...field}
                                             placeholder="Select city"
-                                            disabled={!selectedState}
+                                            disabled={cityList.length === 0}
+                                            showSearch
+                                            optionFilterProp="children"
                                             className="w-[407px] rounded-[16px]"
                                             style={{ height: 48 }}
+                                            filterOption={(input, option) =>
+                                                (option?.children as string)
+                                                    ?.toLowerCase()
+                                                    .includes(input.toLowerCase())
+                                            }
                                         >
-                                            {(cities[selectedState] || []).map((city, index) => (
-                                                <Option key={index} value={city}>
-                                                    {city}
-                                                </Option>
-                                            ))}
-
+                                            {Array.isArray(cityList) &&
+                                                cityList.map((city) => (
+                                                    <Option key={city.id} value={city}>
+                                                        {city.name}
+                                                    </Option>
+                                                ))}
                                         </Select>
                                     )}
                                 />
+
                             </Form.Item>
                         </Col>
                     </Row>
 
+                    {/* Submit Button */}
                     <Form.Item className="text-center mt-5">
                         <Button
                             htmlType="submit"
@@ -279,23 +333,21 @@ const ProfilePopupForm = ({
                 open={isOtpModalVisible}
                 onClose={() => setIsOtpModalVisible(false)}
                 phoneNumber={phoneNumber}
-                onSubmitOtp={(otp) => {
-                    console.log("Submitted OTP:", otp);
-                    setIsOtpModalVisible(false);
-                    setTimeout(() => {
-                        setIsSuccessModalVisible(true);
-                    }, 300);
-                    return true;
-                }}
                 onBack={() => {
                     setIsOtpModalVisible(false);
-                    setTimeout(() => {
-                        setIsFormVisible(true);
-                    }, 200);
+                    setTimeout(() => setIsFormVisible(true), 200);
+                }}
+                formData={{
+                    companyName: formData?.companyName || "",
+                    firstName: formData?.firstName || "",
+                    lastName: formData?.lastName || "",
+                    phoneNo: formData?.phoneNo || "",
+                    state: formData?.state || "",
+                    city: formData?.city || "",
                 }}
             />
 
-            {/* Success Modal */}
+
             <SuccessModal
                 open={isSuccessModalVisible}
                 onClose={() => setIsSuccessModalVisible(false)}
@@ -305,4 +357,3 @@ const ProfilePopupForm = ({
 };
 
 export default ProfilePopupForm;
-

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Typography, Button, Image, Spin } from "antd";
-import { useNavigate, useParams } from "react-router-dom";
+import { Typography, Button, Image, Spin, Tooltip } from "antd";
+import { useParams } from "react-router-dom";
 import BusinessIcon from "../assets/icons/Bussiness Type.svg";
 import LocationIcon from "../assets/icons/Location.svg";
 import IndustryIcon from "../assets/icons/Industries.svg";
@@ -9,57 +9,84 @@ import VerifiedIcon from "../assets/icons/VerifiedIcon.svg";
 import CheckIcon from "../assets/icons/check.svg";
 import Vector from "../assets/icons/Vector.svg";
 import ProfileForm from "./ProfileFormDrawer";
-import { generateLinkByCompanyId, verifyLinkAndGetData } from "../api/inviteApi";
+import { verifyLinkAndGetData } from "../api/inviteApi";
 
 const { Text, Paragraph } = Typography;
 
-interface ConnectionRequestProps {
-    companyId?: number;
+interface InfoBlockProps {
+    icon: string;
+    label: string;
+    value: string;
 }
 
-const ConnectionRequest = ({ companyId: propCompanyId }: ConnectionRequestProps) => {
-    const DEFAULT_COMPANY_ID = 40;
+const InfoBlock = ({ icon, label, value }: InfoBlockProps) => (
+    <div className="flex w-full sm:w-[calc(50%-0.5rem)] md:w-[200px] items-start gap-2">
+        <img src={icon} alt={`${label} Icon`} className="w-8 sm:w-10 h-8 sm:h-10" />
+        <div className="text-xs sm:text-sm leading-tight w-full">
+            <p>{label}</p>
+            <Tooltip title={value} placement="topLeft">
+                <p className="text-[#1B1D27] font-medium line-clamp-2 break-words">
+                    {value || "N/A"}
+                </p>
+            </Tooltip>
+        </div>
+    </div>
+);
 
-    const [companyId /*, setCompanyId*/] = useState<number>(propCompanyId ?? DEFAULT_COMPANY_ID);
+interface BenefitProps {
+    text: string;
+    desc: string;
+}
+
+const Benefit = ({ text, desc }: BenefitProps) => (
+    <div className="flex items-start gap-2 sm:gap-3">
+        <img src={CheckIcon} alt="Check" className="w-4 sm:w-5 h-4 sm:h-5 mt-1" />
+        <div className="space-y-1">
+            <p className="text-[#1B1D27] font-medium text-sm">{text}</p>
+            <p className="text-[#717680] text-xs">{desc}</p>
+        </div>
+    </div>
+);
+
+interface CompanyData {
+    companyId: string;
+    profileImg: string;
+    firstName: string;
+    lastName: string;
+    companyName: string;
+    aboutCompany: string;
+    productCount: number;
+    connectionCount: number;
+    isVerified: boolean;
+    businessType: string[];
+    industryTypes: string[];
+    city: string;
+    state: string;
+    catalogLink: string;
+}
+
+const ConnectionRequest = () => {
     const [openDrawer, setOpenDrawer] = useState(false);
-    const [companyData, setCompanyData] = useState<any>(null);
+    const [companyData, setCompanyData] = useState<CompanyData | null>(null);
     const [loading, setLoading] = useState(true);
 
     const params = useParams<{ linkCode?: string }>();
-    const navigate = useNavigate();
 
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true);
-
             try {
-                let linkCode = params.linkCode;
-
-                if (!linkCode) {
-                    const generateRes = await generateLinkByCompanyId(companyId);
-                    if (generateRes.status !== 200) throw new Error("Failed to generate invite link");
-
-                    linkCode = generateRes.data.linkCode;
-                    navigate(`/${linkCode}`, { replace: true });
-                    return;
+                if (!params.linkCode) {
+                    throw new Error("Link code is missing");
                 }
 
-                const verifyRes = await verifyLinkAndGetData(linkCode);
-                if (verifyRes.status !== 200) throw new Error("Failed to fetch company data");
+                const verifyRes = await verifyLinkAndGetData(params.linkCode);
+                if (verifyRes.status !== 200)
+                    throw new Error("Failed to fetch company data");
 
-                if (verifyRes.data.companyId !== companyId) {
-                    const generateRes = await generateLinkByCompanyId(companyId);
-                    if (generateRes.status !== 200) throw new Error("Failed to generate invite link");
-
-                    const newLinkCode = generateRes.data.linkCode;
-                    if (newLinkCode !== linkCode) {
-                        navigate(`/${newLinkCode}`, { replace: true });
-                        return;
-                    }
-                } else {
-                    setCompanyData(verifyRes.data);
-                }
-            } catch {
+                setCompanyData(verifyRes.data);
+            } catch (err) {
+                console.error("Error fetching connection request data:", err);
                 setCompanyData(null);
             } finally {
                 setLoading(false);
@@ -67,7 +94,7 @@ const ConnectionRequest = ({ companyId: propCompanyId }: ConnectionRequestProps)
         };
 
         fetchData();
-    }, [companyId, params.linkCode, navigate]);
+    }, [params.linkCode]);
 
     if (loading) {
         return (
@@ -77,78 +104,100 @@ const ConnectionRequest = ({ companyId: propCompanyId }: ConnectionRequestProps)
         );
     }
 
-    const safeData = companyData || {
+    const safeData: CompanyData = companyData || {
+        companyId: "",
+        profileImg: "",
         firstName: "",
         lastName: "",
         companyName: "",
         aboutCompany: "",
-        productCount: "",
-        connectionCount: "",
+        productCount: 0,
+        connectionCount: 0,
+        isVerified: false,
         businessType: [],
         industryTypes: [],
         city: "",
-        state: ""
+        state: "",
+        catalogLink: ""
     };
 
-    const joinOrNA = (arr: string[]) => (arr.length ? arr.join(", ") : "N/A");
+    const joinOrNA = (value: string[]) => (value.length ? value.join(", ") : "N/A");
 
     return (
-        <div className="w-full max-w-[1440px] h-auto min-h-screen mx-auto bg-white px-4 md:px-8">
+        <div className="w-full max-w-[1440px] min-h-screen mx-auto bg-white px-3 sm:px-6 md:px-8">
             {/*====== Header ======*/}
-            <div className="relative w-full bg-[url('/src/img/Header-Back.png')] bg-cover bg-center px-4 sm:px-10 md:px-[112px] py-10 md:py-20">
-                <h2 className="text-right font-inter-tight text-2xl font-bold text-[#172554] tracking-tight max-w-[710px] ml-auto">
+            <div className="relative w-full bg-[url('/src/img/Header-Back.png')] bg-cover bg-center px-3 sm:px-6 md:px-[112px] py-8 md:py-16">
+                <h2 className="text-right font-inter-tight text-xl sm:text-2xl md:text-3xl font-bold text-[#172554] tracking-tight max-w-full md:max-w-[710px] ml-auto">
                     New Connection Request
                     <span className="block md:inline">
-                        {" "}
-                        — From {safeData.firstName} {safeData.lastName}
+                        {" "}— From {safeData.firstName} {safeData.lastName}
                     </span>
                 </h2>
             </div>
 
             {/*====== Main Content ======*/}
-            <div className="relative w-full max-w-[1096px] mx-auto !-mt-[80px] md:-mt-[120px] flex flex-col items-start">
-                {/*====== Profile Image ======*/}
-                <div className="w-[120px] h-[120px] sm:w-[160px] sm:h-[160px] rounded-full border-3 border-white overflow-hidden">
+            <div className="relative w-full max-w-[1096px] mx-auto -mt-16 md:-mt-[120px] flex flex-col items-start px-2 sm:px-0">
+                {/* Profile Image */}
+                <div className="w-24 h-24 sm:w-36 sm:h-36 md:w-40 md:h-40 rounded-full border-3 border-white overflow-hidden">
                     <Image
-                        src="/src/img/Profile.png"
+                        src={safeData.profileImg}
                         alt="Profile"
                         preview={false}
                         className="w-full h-full object-cover"
                     />
                 </div>
 
-                {/*====== Company Info ======*/}
+                {/* Company Info */}
                 <div className="mt-4 w-full">
                     <div className="flex flex-col">
                         <div>
                             <div className="flex items-center gap-2 flex-wrap">
-                                <h4 className="text-[#1B1D27] text-xl font-bold leading-tight tracking-tight">
+                                <h4 className="text-[#1B1D27] text-lg sm:text-xl md:text-2xl font-bold leading-tight tracking-tight">
                                     {safeData.companyName}
                                 </h4>
-                                <Image src={VerifiedIcon} alt="Verified" preview={false} className="w-5 h-5" />
+
+                                {safeData.isVerified && (
+                                    <Image
+                                        src={VerifiedIcon}
+                                        alt="Verified"
+                                        preview={false}
+                                        className="w-4 h-4 sm:w-5 sm:h-5"
+                                    />
+                                )}
                             </div>
-                            <Text className="!text-[#414651] font-medium block">
+
+                            <Text className="!text-[#414651] font-medium block text-sm sm:text-base">
                                 {safeData.firstName} {safeData.lastName}
                             </Text>
-                            <Paragraph className="mt-2 text-sm md:text-base !text-[#414651]">
+                            <Paragraph className="mt-2 text-xs sm:text-sm md:text-base !text-[#414651]">
                                 {safeData.aboutCompany}
                             </Paragraph>
-                            <Text className="text-sm !text-[#414651] font-medium block">
+                            <Text className="text-xs sm:text-sm !text-[#414651] font-medium block">
                                 {safeData.productCount} Products | {safeData.connectionCount} Connections
                             </Text>
                         </div>
 
-                        <div className="flex flex-col sm:flex-row items-start gap-2 sm:gap-4 mt-4 w-full">
+                        <div className="flex flex-col sm:flex-row items-start gap-2 sm:gap-4 mt-4">
                             <Button
                                 type="primary"
-                                className="w-full sm:w-[176.5px] px-6 py-2 h-9 font-medium rounded-md flex justify-center items-center !text-xs !font-semibold !leading-tight gap-4"
+                                className="w-full sm:w-[176.5px] px-6 py-2 h-9 !text-xs !sm:text-sm !font-semibold !rounded-md flex justify-center items-center gap-1"
                                 onClick={() => setOpenDrawer(true)}
                             >
                                 Accept
                             </Button>
                             <Button
-                                onClick={() => window.open("https://biizline.com/", "_blank")}
-                                className="w-full sm:w-[176.5px] px-6 py-2 h-9 !bg-[#E9EAEB] !text-[#414651] !font-semibold rounded-md flex justify-center items-center gap-4 leading-tight"
+                                onClick={() => {
+                                    if (safeData.catalogLink) {
+                                        const decodedUrl = decodeURIComponent(safeData.catalogLink);
+                                        const finalUrl = decodedUrl.startsWith("http")
+                                            ? decodedUrl
+                                            : `https://app.biizline.com/${decodedUrl}`;
+                                        window.open(finalUrl);
+                                    } else {
+                                        window.open("https://app.biizline.com/");
+                                    }
+                                }}
+                                className="w-full sm:w-[176.5px] px-6 py-2 h-9 !bg-[#E9EAEB] !text-[#414651] !text-xs sm:text-sm !font-semibold rounded-md flex justify-center items-center gap-1"
                             >
                                 Product Catalogue
                             </Button>
@@ -156,32 +205,43 @@ const ConnectionRequest = ({ companyId: propCompanyId }: ConnectionRequestProps)
                     </div>
 
                     <div className="flex flex-wrap items-start gap-4 mt-6 text-[#717680]">
-                        <InfoBlock icon={BusinessIcon} label="Business Type" value={joinOrNA(safeData.businessType)} />
-                        <InfoBlock icon={IndustryIcon} label="Industry" value={joinOrNA(safeData.industryTypes)} />
-                        <InfoBlock icon={SinceIcon} label="Since" value="16+ Years" />
-                        <InfoBlock icon={LocationIcon} label="Location" value={`${safeData.city}, ${safeData.state}`} />
+                        <InfoBlock
+                            icon={BusinessIcon}
+                            label="Business Type"
+                            value={joinOrNA(safeData.businessType)}
+                        />
+                        <InfoBlock
+                            icon={IndustryIcon}
+                            label="Industry Type"
+                            value={joinOrNA(safeData.industryTypes)}
+                        />
+                        <InfoBlock icon={SinceIcon} label="Since" value="N/A" />
+                        <InfoBlock
+                            icon={LocationIcon}
+                            label="Location"
+                            value={`${safeData.city}, ${safeData.state}`}
+                        />
                     </div>
                 </div>
 
-                {/*====== Bizline Benefits ======*/}
-                <div className="flex flex-col items-start gap-5 w-full p-5 bg-green-50 border border-green-300 rounded-xl mt-10">
-                    <div className="flex items-center gap-1 mb-0">
+                {/* Bizline Benefits */}
+                <div className="flex flex-col items-start gap-5 w-full p-4 sm:p-5 bg-green-50 border border-green-300 rounded-xl mt-10">
+                    <div className="flex flex-wrap items-center gap-1">
                         <p className="font-medium text-gray-700 text-sm md:text-base mb-0">Ordering from</p>
-                        <img src={Vector} className="w-[69px] h-[16px]" alt="Biizline" />
+                        <img src={Vector} className="w-16 sm:w-[69px] h-auto" alt="Biizline" />
                         <p className="font-medium text-gray-700 text-sm md:text-base mb-0">means</p>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5 text-xs text-gray-500">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-xs sm:text-sm text-gray-500 w-full">
                         <Benefit text="Full Product Catalog" desc="Explore the vendor's range at your fingertips." />
                         <Benefit text="Exclusive Business Pricing" desc="Get special rates for your business." />
                         <Benefit text="Instant Vendor Chat" desc="Communicate directly with the vendor." />
                         <Benefit text="Seamless Direct Ordering" desc="Place orders instantly, right from the platform." />
-                        <Benefit text="Seamless Direct Ordering" desc="Place orders instantly, right from the platform." />
-                        <Benefit text="Seamless Direct Ordering" desc="Place orders instantly, right from the platform." />
+                        <Benefit text="Real-Time Order Tracking" desc="Track your order and get delivery updates." />
                     </div>
                 </div>
 
-                {/* ======= Footer ====== */}
+                {/* Footer */}
                 <div className="text-left mt-10 w-full">
                     <h3 className="text-2xl md:text-[42px] leading-snug text-[#A4A7AE] font-extrabold">
                         Connect. Collaborate. Grow!
@@ -196,33 +256,5 @@ const ConnectionRequest = ({ companyId: propCompanyId }: ConnectionRequestProps)
         </div>
     );
 };
-
-const InfoBlock = ({
-    icon,
-    label,
-    value,
-}: {
-    icon: string;
-    label: string;
-    value: string;
-}) => (
-    <div className="flex w-full sm:w-[200px] items-start gap-2">
-        <img src={icon} alt={`${label} Icon`} className="w-10 h-10" />
-        <div className="text-sm leading-tight">
-            <p>{label}</p>
-            <p className="text-[#1B1D27] font-medium">{value}</p>
-        </div>
-    </div>
-);
-
-const Benefit = ({ text, desc }: { text: string; desc: string }) => (
-    <div className="flex items-start gap-3">
-        <img src={CheckIcon} alt="Check" className="w-5 h-5 mt-1" />
-        <div className="space-y-1">
-            <p className="text-[#1B1D27] font-medium">{text}</p>
-            <p className="text-[#717680] text-xs">{desc}</p>
-        </div>
-    </div>
-);
 
 export default ConnectionRequest;
